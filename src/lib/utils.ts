@@ -62,129 +62,44 @@ export const fixEnginePath = (mapName: string, filePath: string, type: "move" | 
     return (songBaseFolder + finalPath).toLowerCase();
 }
 
-/**
- * Parses difficulty from string or enum notation.
- * @param value Raw difficulty string (e.g. "SongDifficulty.Hard", "2").
- * @returns Numeric difficulty (defaults to Normal).
- */
-export const parseDifficulty = (value: string | null): number => {
-    if (!value) return Difficulty.Normal;
-    if (value.includes('.')) {
-        const difficultyName = value.split('.')[1];
-        switch (difficultyName) {
-            case 'Easy': return Difficulty.Easy;
-            case 'Normal': return Difficulty.Normal;
-            case 'Hard': return Difficulty.Hard;
-            case 'Extreme': return Difficulty.Extreme;
-            default: return Difficulty.Normal;
-        }
-    }
-    return parseInt(value) || Difficulty.Normal;
+/** Generic parser for enum values */
+const parseEnum = <T extends number>(value: string | null, enumType: any, defaultValue: T): T => {
+  if (!value) return defaultValue;
+
+  // Only keep numeric values
+  const numericValues = Object.values(enumType).filter(v => typeof v === "number") as number[];
+
+  // If numeric string, return the number if it's in enum
+  const num = parseInt(value);
+  if (!isNaN(num) && numericValues.includes(num)) return num as T;
+
+  // Otherwise, take the part after dot (if any) and lookup enum by key
+  const key = value.includes('.') ? value.split('.')[1] : value;
+  return (enumType[key] ?? defaultValue) as T;
 };
 
-/**
- * Parses number of coaches.
- * @param value Raw coach string (e.g. "NumCoach.Duo", "2").
- * @returns Numeric coach count (defaults to Solo).
- */
-export const parseNumCoach = (value: string | null): number => {
-    if (!value) return NumCoach.Solo;
-    if (value.includes('.')) {
-        const coachType = value.split('.')[1];
-        switch (coachType) {
-            case 'Solo': return NumCoach.Solo;
-            case 'Duo': return NumCoach.Duo;
-            case 'Trio': return NumCoach.Trio;
-            case 'Quatuor': return NumCoach.Quatuor;
-            default: return NumCoach.Solo;
-        }
-    }
-    return parseInt(value) || NumCoach.Solo;
-};
+/** ---------------- Specific parsers ---------------- */
+export const parseNumCoach = (value: string | null) =>
+  parseEnum(value, NumCoach, NumCoach.Solo);
 
-/**
- * Parses sweat difficulty level.
- * @param value Raw sweat difficulty string (e.g. "SweatDifficulty.Medium", "2").
- * @returns Numeric sweat difficulty (defaults to Low).
- */
-export const parseSweatDifficulty = (value: string | null): number => {
-    if (!value) return SweatDifficulty.Low;
-    if (value.includes('.')) {
-        const sweatDifficultyName = value.split('.')[1];
-        switch (sweatDifficultyName) {
-            case 'Low': return SweatDifficulty.Low;
-            case 'Medium': return SweatDifficulty.Medium;
-            case 'High': return SweatDifficulty.High;
-            default: return SweatDifficulty.Low;
-        }
-    }
-    return parseInt(value) || SweatDifficulty.Low;
-};
+export const parseSweatDifficulty = (value: string | null) =>
+  parseEnum(value, SweatDifficulty, SweatDifficulty.Low);
 
-/**
- * Parses game mode flags.
- * @param value Raw flag string (e.g. "GameModeFlags.Mashup", "4").
- * @returns Numeric game mode flag (defaults to None).
- */
-export const parseGameModeFlags = (value: string | null): number => {
-    if (!value) return GameModeFlags.Classic;
-    if (value.includes('.')) {
-        const flagsName = value.split('.')[1];
-        switch (flagsName) {
-            case 'Classic': return GameModeFlags.Classic;
-            case 'Mashup': return GameModeFlags.Mashup;
-            case 'PartyMaster': return GameModeFlags.PartyMaster;
-            case 'Sweat': return GameModeFlags.Sweat;
-            case 'Battle': return GameModeFlags.Battle;
-            case 'OnStage': return GameModeFlags.OnStage;
-            case 'MusicMotion': return GameModeFlags.MusicMotion;
-            default: return GameModeFlags.None;
-        }
-    }
-    return parseInt(value) || GameModeFlags.None;
-};
+export const parseGameModeFlags = (value: string | null) =>
+  parseEnum(value, GameModeFlags, GameModeFlags.Classic);
 
-/**
- * Parses game mode status.
- * @param value Raw status string (e.g. "GameModeStatus.Hidden", "2").
- * @returns Numeric game mode status (defaults to Unavailable).
- */
-export const parseGameModeStatus = (value: string | null): number => {
-    if (!value) return GameModeStatus.Available;
-    if (value.includes('.')) {
-        const statusName = value.split('.')[1];
-        switch (statusName) {
-            case 'Unavailable': return GameModeStatus.Unavailable;
-            case 'Hidden': return GameModeStatus.Hidden;
-            case 'Locked': return GameModeStatus.Locked;
-            case 'Available': return GameModeStatus.Available;
-            default: return GameModeStatus.Unavailable;
-        }
-    }
-    return parseInt(value) || GameModeStatus.Unavailable;
-};
+export const parseGameModeStatus = (value: string | null) =>
+  parseEnum(value, GameModeStatus, GameModeStatus.Available);
 
-/**
- * Parses game mode.
- * @param value Raw mode string (e.g. "GameMode.Mashup", "3").
- * @returns Numeric game mode (defaults to Classic).
- */
-export const parseGameMode = (value: string | null): number => {
-    if (!value) return GameMode.Classic;
-    if (value.includes('.')) {
-        const gameModeName = value.split('.')[1];
-        switch (gameModeName) {
-            case 'Classic': return GameMode.Classic;
-            case 'Mashup': return GameMode.Mashup;
-            case 'PartyMaster': return GameMode.PartyMaster;
-            case 'Sweat': return GameMode.Sweat;
-            case 'Battle': return GameMode.Battle;
-            case 'OnStage': return GameMode.OnStage;
-            case 'MusicMotion': return GameMode.MusicMotion;
-            default: return GameMode.Classic;
-        }
-    }
-    return parseInt(value) || GameMode.Classic;
+export const parseGameMode = (value: string | null) =>
+  parseEnum(value, GameMode, GameMode.Classic);
+
+export const parseDifficulty = (value: string | null) =>
+  parseEnum(value, Difficulty, Difficulty.Normal);
+
+export const assureJDVersion = (value: number | null) : number => {
+    if (value === 5) return 2014;
+    else return value || 2018; // default to 2018, (idk why)
 };
 
 /**
@@ -309,4 +224,10 @@ export const tmlToKtape = (tml: Timeline, unitConverter: UnitConverter): Ktape =
             }
         }
     };
+};
+
+export const fixSoundSetPath = (path: string) => {
+    if (path.endsWith(".tpl")) path = path.replace(".tpl", ".ogg");
+    if (path.includes("set_")) path = path.replace("set_", "");
+    return path;
 };

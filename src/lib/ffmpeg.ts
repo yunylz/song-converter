@@ -1,5 +1,7 @@
 import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
 import { execSync } from 'child_process';
+import cliProgress from "cli-progress";
+
 import logger from "./logger";
 
 /**
@@ -31,6 +33,121 @@ export const convertAudio = (input: string, output: string, args: string[] = [])
       })
       .save(output);
   });
+};
+
+// TODO: maybe these two commands should be merged? -yunyl
+
+export const convertVideo = (input: string, output: string, args: string[] = []): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const command: FfmpegCommand = ffmpeg(input);
+
+        if (args.length > 0) {
+            command.outputOptions(args);
+        }
+
+        // Create a CLI progress bar
+        const progressBar = new cliProgress.SingleBar({
+            format: 'Converting [{bar}] {percentage}% | ETA: {eta_formatted}',
+            barCompleteChar: '#',
+            barIncompleteChar: '-',
+            hideCursor: true
+        });
+
+        let duration: number | undefined;
+
+        command
+            .on('start', (cmd) => {
+                //logger.info(`FFmpeg started with command: ${cmd}`);
+            })
+            .on('codecData', (data) => {
+                // Get duration in seconds
+                const timeParts = data.duration.split(':').map(Number);
+                duration = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
+                progressBar.start(100, 0);
+            })
+            .on('progress', (progress) => {
+                if (duration && progress.timemark) {
+                    const parts = progress.timemark.split(':').map(Number);
+                    const seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    const percent = Math.min((seconds / duration) * 100, 100);
+                    progressBar.update(percent);
+                }
+            })
+            .on('error', (err) => {
+                progressBar.stop();
+                logger.error(`Error converting video: ${err.message}`);
+                reject(err);
+            })
+            .on('end', () => {
+                progressBar.update(100);
+                progressBar.stop();
+                resolve();
+            })
+            .save(output);
+    });
+};
+
+export const convertDash = (args: string[]): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        if (!args || args.length === 0) return reject(new Error("No ffmpeg arguments provided"));
+
+        // FFmpeg command: input is included in args with "-i"
+        const inputIndex = args.findIndex(a => a === "-i");
+        if (inputIndex === -1 || inputIndex + 1 >= args.length) {
+            return reject(new Error("No input file specified in args"));
+        }
+
+        const input = args[inputIndex + 1];
+        const command: FfmpegCommand = ffmpeg(input);
+
+        // Pass all args except "-i input"
+        const outputArgs = [...args];
+        outputArgs.splice(inputIndex, 2); // remove "-i" and input
+
+        if (outputArgs.length > 0) {
+            command.outputOptions(outputArgs);
+        }
+
+        const progressBar = new cliProgress.SingleBar({
+            format: 'Converting DASH [{bar}] {percentage}% | ETA: {eta_formatted}',
+            barCompleteChar: '#',
+            barIncompleteChar: '-',
+            hideCursor: true
+        });
+
+        let duration: number | undefined;
+
+        command
+            .on('start', (cmd) => {
+                logger.info(`FFmpeg started with command: ${cmd}`);
+            })
+            .on('codecData', (data) => {
+                if (data.duration) {
+                    const parts = data.duration.split(':').map(Number);
+                    duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    progressBar.start(100, 0);
+                }
+            })
+            .on('progress', (progress) => {
+                if (duration && progress.timemark) {
+                    const parts = progress.timemark.split(':').map(Number);
+                    const seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    const percent = Math.min((seconds / duration) * 100, 100);
+                    progressBar.update(percent);
+                }
+            })
+            .on('error', (err) => {
+                progressBar.stop();
+                logger.error(`Error converting DASH: ${err.message}`);
+                reject(err);
+            })
+            .on('end', () => {
+                progressBar.update(100);
+                progressBar.stop();
+                resolve();
+            })
+            .run(); // don't call save() because DASH produces multiple outputs
+    });
 };
 
 /**

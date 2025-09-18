@@ -61,6 +61,22 @@ export enum NumCoach {
   Max
 }
 
+export enum LyricsType {
+  None             =   -1,
+  OldSystem		=	0,
+  Classic			=	1,
+  OnStage			=	2,
+  WorldDanceFloor	=	3
+}
+
+export enum BackgroundType {
+  OldSystem  =	0,
+  Graph	  = 1,
+  OnStage	  =	2,
+  Sweat	  =	3,
+  Extreme	  =	4,	
+  CMU	      =	5	
+}
 export interface Song {
   class: "SongDescriptor";
   originalJDVersion: number;
@@ -73,7 +89,17 @@ export interface Song {
   flags: GameModeFlags;
   status: GameModeStatus;
   mode: GameMode;
+  backgroundType: BackgroundType;
+  lyricsType: LyricsType;
+  localeID: number;
+  mojoValue: number;
 };
+
+export interface AudioPreview {
+  entry: number;
+  loopStart: number;
+  loopEnd: number;
+}
 
 export interface MusicTrack {
   class: "MusicTrack";
@@ -82,10 +108,7 @@ export interface MusicTrack {
   sections: MusicSection[];
   startBeat: number;
   endBeat: number;
-  audioPreview: {
-    startBeat: number;
-    endBeat: number;
-  },
+  audioPreview: AudioPreview,
   videoStartTime: number;
   volume: number;
 };

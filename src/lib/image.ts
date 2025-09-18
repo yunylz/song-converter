@@ -3,6 +3,8 @@ import path from "path";
 import sharp from "sharp";
 import imagemagick from "imagemagick";
 
+import logger from "./logger";
+
 /**
  * Converts an image to PNG format using either Sharp or ImageMagick.
  * @param input Input image file

@@ -52,6 +52,10 @@ export interface MusicTrackStructure {
   startBeat: number;
   endBeat: number;
   videoStartTime: number;
+  volume?: number;
+  previewEntry?: number;
+  previewLoopStart?: number;
+  previewLoopEnd?: number;
 }
 
 export interface Track {

@@ -5,6 +5,8 @@ import { MapType } from "../types/godot";
 
 /**
  * Detects the map type based on the files present in the input folder.
+ * Proceeds if at least one signature file is found.
+ * Priority order: P4 > UAF > NOW
  * @param input - Path to the input map folder.
  * @returns {Promise<MapType|null>} The detected {@link MapType} or `null` if not found.
  */
@@ -13,6 +15,8 @@ const mapDetector = async (input: string): Promise<MapType | null> => {
     [MapType.P4]: [
       "SongDesc.tpl",
       "timeline/timeline.tpl",
+      "Timeline/*.dtape",
+      "Timeline/*.ktape",
       "Audio/*.trk"
     ],
     [MapType.UAF]: [
@@ -31,37 +35,36 @@ const mapDetector = async (input: string): Promise<MapType | null> => {
     ]
   };
 
-  let bestMatch: { type: MapType | null; percentage: number } = { type: null, percentage: 0 };
+  const detected: MapType[] = [];
 
   for (const [mapType, filePatterns] of Object.entries(files) as [MapType, string[]][]) {
-    let foundCount = 0;
-
     for (const pattern of filePatterns) {
       const fullPattern = path.join(input, pattern);
       const matches = await glob(fullPattern);
 
       if (matches.length > 0) {
-        foundCount++;
+        detected.push(mapType);
+        break; // one match is enough to count the type
       }
     }
-
-    const percentage = Math.round((foundCount / filePatterns.length) * 100);
-
-    if (percentage > bestMatch.percentage) {
-      bestMatch = { type: mapType, percentage };
-    }
   }
 
-  if (bestMatch.percentage === 100) {
-    logger.success(`Detected "${bestMatch.type}" map type! (${bestMatch.percentage}%)`);
-    return bestMatch.type;
-  } else if (bestMatch.percentage > 0) {
-    logger.info(`Best guess: "${bestMatch.type}" map type (${bestMatch.percentage}%), can't process multiple formatted maps.`);
-    return null;
-  } else {
-    logger.error("Could not detect map type (0%)");
+  if (detected.length === 0) {
+    logger.error("Could not detect map type (no matching files)");
     return null;
   }
+
+  // Pick highest priority
+  const priority: MapType[] = [MapType.P4, MapType.UAF, MapType.NOW];
+  const chosen = priority.find(type => detected.includes(type)) ?? null;
+
+  if (chosen) {
+    logger.success(`Detected "${chosen}" map type!`);
+    return chosen;
+  }
+
+  logger.error("Ambiguous or unsupported map type.");
+  return null;
 };
 
 export default mapDetector;

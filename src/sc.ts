@@ -11,6 +11,7 @@ import { Dance, Karaoke, MapType, MusicTrack, Song } from "./types/godot";
 import menuart from "./lib/menuart";
 import audio from "./lib/audio";
 import movespace from "./lib/movespace";
+import video from "./lib/video";
 
 let project: { version: string };
 
@@ -28,6 +29,7 @@ let project: { version: string };
   const skipMoves = !options.moves;
   const skipAudio = !options.audio;
   const skipMenuart = !options.menuart;
+  const skipVideo = !options.video;
 
   // Check prerequisites
   checkPrerequisites();
@@ -56,6 +58,7 @@ let project: { version: string };
     menuArtPath: string;
     audioPath: string;
     ambFiles: string[];
+    videoPath: string | null;
   };
 
   // Based on map type
@@ -141,4 +144,21 @@ let project: { version: string };
   else {
     logger.warn(`Audio processing was skipped.`);
   };
+
+  if (!skipVideo) {
+    if (!mapResult.videoPath) {
+      logger.warn(`No video was found, skipping video processing.`);
+    } else {
+      logger.info(`Processing ${mapResult.videoPath}...`);
+      const videoResult = await video.process(mapResult.videoPath, output, mapResult.mapName);
+      if (videoResult) {
+        logger.success(`Video processed successfully!`);
+      } else {
+        logger.warn(`No video were processed.`);
+      };
+    };
+  }
+  else {
+    logger.warn(`Video processing was skipped.`);
+  }
 })();

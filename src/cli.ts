@@ -17,13 +17,15 @@ export default (project: { version: string }) => {
     .option("-p, --no-pictos", "Skip pictos conversion")
     .option("-m, --no-moves", "Skip moves conversion")
     .option("-a, --no-audio", "Skip audio conversion")
-    .option("-M, --no-menuart", "Skip menuart conversion");
+    .option("-M, --no-menuart", "Skip menuart conversion")
+    .option("-v, --no-video", "Skip video conversion");
 
   program.parse(process.argv);
 
   const options = program.opts<{
     input: string; output: string,
-    pictos: boolean, moves: boolean, audio: boolean, menuart: boolean
+    pictos: boolean, moves: boolean, audio: boolean, menuart: boolean,
+    video: boolean
   }>();
 
   // Show help if no options are provided

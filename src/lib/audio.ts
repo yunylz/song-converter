@@ -20,6 +20,10 @@ const convert = async (input: string, outputFolder: string, isAmb = false): Prom
   const output = path.resolve(outputFolder, isAmb ? "audio/amb" : "audio", path.basename(input.toLowerCase()));
   const outputDir = path.dirname(output);
 
+  if (fs.existsSync(output)) {
+    logger.warn(`Audio file already exists, it will be overwritten!`);
+  };
+
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   };

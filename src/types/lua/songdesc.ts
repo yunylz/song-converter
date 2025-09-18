@@ -27,6 +27,12 @@ export interface SongDescTemplate {
             };
             [key: string]: unknown;
           }>;
+          BackgroundType: number | null;
+          LyricsType: number | null;
+          Status: number | null;
+          LocaleID: number | null;
+          MojoValue: number | null;
+          Mode: number | null;
           DefaultColors: Array<{
             KEY: string | null;
             VAL: string | null;
@@ -53,3 +59,5 @@ export interface SongDescTemplate {
   };
   [key: string]: unknown;
 }
+
+export type PreviewType = SongDescTemplate["params"]["Actor_Template"]["COMPONENTS"][number]["JD_SongDescTemplate"]["AudioPreviews"][number]["AudioPreview"];

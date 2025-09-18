@@ -14,9 +14,9 @@ const menuartExtensions = [".png", ".jpg", ".jpeg", ".tga", ".bmp", ".gif"];
  * @returns 
  */
 const menuArt = async (inputFolder: string, outputFolder: string) => {
-    const pictosOutput = path.resolve(outputFolder, "menuart");
-    if (!fs.existsSync(pictosOutput)) {
-        fs.mkdirSync(pictosOutput, { recursive: true });
+    const menuArtOutput = path.resolve(outputFolder, "menuart");
+    if (!fs.existsSync(menuArtOutput)) {
+        fs.mkdirSync(menuArtOutput, { recursive: true });
     };
 
     const textures = fs.readdirSync(inputFolder).filter(texture => menuartExtensions.includes(path.extname(texture)));
@@ -51,7 +51,12 @@ const menuArt = async (inputFolder: string, outputFolder: string) => {
         } else continue; // Skip unsupported menuart
 
         const textureInput = path.resolve(inputFolder, texture);
-        const textureOutput = path.resolve(pictosOutput, `${name.toLowerCase()}.png`);
+        const textureOutput = path.resolve(menuArtOutput, `${name.toLowerCase()}.png`);
+
+        if (fs.existsSync(textureOutput)) {
+            logger.warn(`Menuart file already exists, it will be overwritten!`);
+        };
+
         const imageResults = await image(
             textureInput,
             textureOutput,
