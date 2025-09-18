@@ -9,10 +9,21 @@ import { Ktape } from "../types/lua/ktape";
 import { Block, Layer, Mfe, Picto, Timeline } from "../types/lua/tml";
 import UnitConverter from "./unit-converter";
 
-const generateRandomNumber = (min = 1000000000, max = 4294967295) => {
+/**
+ * Generates a random integer between min and max (inclusive).
+ * @param min Minimum value (default: 1,000,000,000).
+ * @param max Maximum value (default: 4,294,967,295).
+ * @returns Random integer within range.
+ */
+const generateRandomNumber = (min = 1000000000, max = 4294967295): number => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 };
 
+/**
+ * Shuffles an array in place using Fisher-Yates algorithm.
+ * @param array Array to shuffle.
+ * @returns The shuffled array (same reference).
+ */
 const shuffleArray = <T>(array: T[]): T[] => {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -21,7 +32,14 @@ const shuffleArray = <T>(array: T[]): T[] => {
     return array;
 };
 
-export const fixEnginePath = (mapName: string, filePath: string, type: "move" | "picto" | "audio") => {
+/**
+ * Converts file paths to engine-friendly paths under `res://maps/{mapName}/`.
+ * @param mapName Name of the map/song.
+ * @param filePath Original file path.
+ * @param type Asset type ("move", "picto", or "audio").
+ * @returns Engine-relative lowercase path.
+ */
+export const fixEnginePath = (mapName: string, filePath: string, type: "move" | "picto" | "audio"): string => {
     const songBaseFolder = `res://maps/${mapName}/`;
     let finalPath : string;
     switch (type) {
@@ -44,10 +62,13 @@ export const fixEnginePath = (mapName: string, filePath: string, type: "move" | 
     return (songBaseFolder + finalPath).toLowerCase();
 }
 
+/**
+ * Parses difficulty from string or enum notation.
+ * @param value Raw difficulty string (e.g. "SongDifficulty.Hard", "2").
+ * @returns Numeric difficulty (defaults to Normal).
+ */
 export const parseDifficulty = (value: string | null): number => {
     if (!value) return Difficulty.Normal;
-
-    // Handle enum values like "SongDifficulty.Normal"
     if (value.includes('.')) {
         const difficultyName = value.split('.')[1];
         switch (difficultyName) {
@@ -58,14 +79,16 @@ export const parseDifficulty = (value: string | null): number => {
             default: return Difficulty.Normal;
         }
     }
-
     return parseInt(value) || Difficulty.Normal;
 };
 
+/**
+ * Parses number of coaches.
+ * @param value Raw coach string (e.g. "NumCoach.Duo", "2").
+ * @returns Numeric coach count (defaults to Solo).
+ */
 export const parseNumCoach = (value: string | null): number => {
     if (!value) return NumCoach.Solo;
-
-    // Handle enum values like "NumCoach.Solo"
     if (value.includes('.')) {
         const coachType = value.split('.')[1];
         switch (coachType) {
@@ -76,14 +99,16 @@ export const parseNumCoach = (value: string | null): number => {
             default: return NumCoach.Solo;
         }
     }
-
     return parseInt(value) || NumCoach.Solo;
 };
 
+/**
+ * Parses sweat difficulty level.
+ * @param value Raw sweat difficulty string (e.g. "SweatDifficulty.Medium", "2").
+ * @returns Numeric sweat difficulty (defaults to Low).
+ */
 export const parseSweatDifficulty = (value: string | null): number => {
     if (!value) return SweatDifficulty.Low;
-
-    // Handle enum values like "SweatDifficulty.Low"
     if (value.includes('.')) {
         const sweatDifficultyName = value.split('.')[1];
         switch (sweatDifficultyName) {
@@ -93,14 +118,16 @@ export const parseSweatDifficulty = (value: string | null): number => {
             default: return SweatDifficulty.Low;
         }
     }
-
     return parseInt(value) || SweatDifficulty.Low;
 };
 
+/**
+ * Parses game mode flags.
+ * @param value Raw flag string (e.g. "GameModeFlags.Mashup", "4").
+ * @returns Numeric game mode flag (defaults to None).
+ */
 export const parseGameModeFlags = (value: string | null): number => {
     if (!value) return GameModeFlags.Classic;
-
-    // Handle enum values like "GameModeFlags.Classic"
     if (value.includes('.')) {
         const flagsName = value.split('.')[1];
         switch (flagsName) {
@@ -114,14 +141,16 @@ export const parseGameModeFlags = (value: string | null): number => {
             default: return GameModeFlags.None;
         }
     }
-
     return parseInt(value) || GameModeFlags.None;
 };
 
+/**
+ * Parses game mode status.
+ * @param value Raw status string (e.g. "GameModeStatus.Hidden", "2").
+ * @returns Numeric game mode status (defaults to Unavailable).
+ */
 export const parseGameModeStatus = (value: string | null): number => {
     if (!value) return GameModeStatus.Available;
-
-    // Handle enum values like "GameModeStatus.Available"
     if (value.includes('.')) {
         const statusName = value.split('.')[1];
         switch (statusName) {
@@ -132,14 +161,16 @@ export const parseGameModeStatus = (value: string | null): number => {
             default: return GameModeStatus.Unavailable;
         }
     }
-
     return parseInt(value) || GameModeStatus.Unavailable;
 };
 
+/**
+ * Parses game mode.
+ * @param value Raw mode string (e.g. "GameMode.Mashup", "3").
+ * @returns Numeric game mode (defaults to Classic).
+ */
 export const parseGameMode = (value: string | null): number => {
     if (!value) return GameMode.Classic;
-
-    // Handle enum values like "GameMode.Classic"
     if (value.includes('.')) {
         const gameModeName = value.split('.')[1];
         switch (gameModeName) {
@@ -153,17 +184,22 @@ export const parseGameMode = (value: string | null): number => {
             default: return GameMode.Classic;
         }
     }
-
     return parseInt(value) || GameMode.Classic;
 };
 
+/**
+ * Converts a TML (timeline) to a DTape structure for motion/picto playback.
+ * @param tml Parsed timeline object.
+ * @param unitConverter Unit converter for beat <-> ticks conversion.
+ * @returns DTape object with Clips and metadata.
+ */
 export const tmlToDtape = (tml: Timeline, unitConverter: UnitConverter): Dtape => {
     let moveTrackIds = Object.fromEntries([...Array(7).keys()].map(i => [i, generateRandomNumber()]));
     
     const allMoves = [
         ...(tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.moves ?? []),
         ...(tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.movesKinect ?? []),
-    ]
+    ];
 
     const moves = allMoves.map((move: Mfe) => ({
         NAME: "MotionClip",
@@ -181,6 +217,7 @@ export const tmlToDtape = (tml: Timeline, unitConverter: UnitConverter): Dtape =
             MotionPlatformSpecifics: []
         }
     }));
+
     const pictosTrackId = generateRandomNumber();
     const pictos = tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.pictos.map((picto: Picto) => ({
         NAME: "PictogramClip",
@@ -196,12 +233,10 @@ export const tmlToDtape = (tml: Timeline, unitConverter: UnitConverter): Dtape =
     }));
 
     const goldMoveLayerTypes = [12];
-
-    const goldMoveLayers = tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.layers.filter((layer : Layer) => goldMoveLayerTypes.includes(layer.TimelineLayer.layerType));
-
-    const goldMoveBlocks = tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.Block.filter((block: Block) => 
-        goldMoveLayers.some(layer => layer.TimelineLayer.layerID === block.TimelineBlock.layerID)
-    )
+    const goldMoveLayers = tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.layers
+        .filter((layer : Layer) => goldMoveLayerTypes.includes(layer.TimelineLayer.layerType));
+    const goldMoveBlocks = tml.params.Actor_Template.COMPONENTS[0].JD_Timeline_Template.Block
+        .filter((block: Block) => goldMoveLayers.some(layer => layer.TimelineLayer.layerID === block.TimelineBlock.layerID));
 
     const goldMoves = goldMoveBlocks.map((block: Block) => ({
         NAME: "GoldEffectClip",
@@ -210,7 +245,7 @@ export const tmlToDtape = (tml: Timeline, unitConverter: UnitConverter): Dtape =
             TrackId: generateRandomNumber(),
             IsActive: 0,
             StartTime: unitConverter.ticksFromBeat(block.TimelineBlock.startPosition),
-            Duration: 24, // 1 beat = 24 ticks
+            Duration: 24,
             EffectType: block.TimelineBlock.modelName.toLowerCase() == "goldmovecascade" ? 2 : 0
         }
     }));
@@ -235,6 +270,12 @@ export const tmlToDtape = (tml: Timeline, unitConverter: UnitConverter): Dtape =
     }
 };
 
+/**
+ * Converts a TML (timeline) to a KTape structure for karaoke/lyrics playback.
+ * @param tml Parsed timeline object.
+ * @param unitConverter Unit converter for beat <-> ticks conversion.
+ * @returns KTape object with Clips and metadata.
+ */
 export const tmlToKtape = (tml: Timeline, unitConverter: UnitConverter): Ktape => {
     return {
         params: {

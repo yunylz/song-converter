@@ -7,7 +7,13 @@ import image from "./image";
 
 const pictosExtensions = [".png", ".jpg", ".jpeg", ".tga", ".bmp", ".gif"];
 
-export default async (inputFolder: string, outputFolder: string) => {
+/**
+ * Converts given pictos folder's images to JDBest foramt.
+ * @param inputFolder Input of the moves folder
+ * @param outputFolder Output of JDBest map folder
+ * @returns 
+ */
+const pictos = async (inputFolder: string, outputFolder: string) => {
     const pictosOutput = path.resolve(outputFolder, "timeline/pictos");
     if (!fs.existsSync(pictosOutput)) {
         fs.mkdirSync(pictosOutput, { recursive: true });
@@ -45,3 +51,5 @@ export default async (inputFolder: string, outputFolder: string) => {
 
     return results;
 };
+
+export default pictos;

@@ -2,6 +2,13 @@ import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
 import { execSync } from 'child_process';
 import logger from "./logger";
 
+/**
+ * Converts an audio file with FFmpeg.
+ * @param input Input audio file
+ * @param output Output audio file
+ * @param args Arguments
+ * @returns 
+ */
 export const convertAudio = (input: string, output: string, args: string[] = []): Promise<void> => {
   return new Promise((resolve, reject) => {
     const command: FfmpegCommand = ffmpeg(input);
@@ -26,6 +33,11 @@ export const convertAudio = (input: string, output: string, args: string[] = [])
   });
 };
 
+/**
+ * Gets the sample rate of an audio file.
+ * @param inputAudio Input audio file
+ * @returns Sample rate in Hz
+ */
 export const getSampleRate = (inputAudio: string): number => {
   try {
     // Method 1: Try to find Nuendo XML in metadata
@@ -51,6 +63,11 @@ export const getSampleRate = (inputAudio: string): number => {
   }
 };
 
+/**
+ * Extracts Nuendo beat markers from the audio file metadata.
+ * @param inputAudio Input audio file
+ * @returns Array of beat marker positions in milliseconds
+ */
 export const extractBeatMarkers = (inputAudio: string): number[] => {
   try {
     const metadataCmd = `ffmpeg -i "${inputAudio}" -f ffmetadata - 2>/dev/null || echo ""`;
@@ -85,6 +102,11 @@ export const extractBeatMarkers = (inputAudio: string): number[] => {
   }
 };
 
+/**
+ * Extracts the Nuendo sample rate from the audio file metadata.
+ * @param inputAudio Input audio file
+ * @returns Nuendo sample rate in Hz
+ */
 const extractNuendoSampleRate = (inputAudio: string): number => {
   try {
     // Try to extract any XML metadata that might contain Nuendo data

@@ -3,7 +3,14 @@ import path from "path";
 import sharp from "sharp";
 import imagemagick from "imagemagick";
 
-export default async (input: string, output: string, options : any = []) => {
+/**
+ * Converts an image to PNG format using either Sharp or ImageMagick.
+ * @param input Input image file
+ * @param output Output path
+ * @param options ImageMagick options
+ * @returns 
+ */
+const image = async (input: string, output: string, options : any = []) => {
     // Convert images to png
     const { ext, name } = path.parse(input);
     const results = {
@@ -44,3 +51,5 @@ export default async (input: string, output: string, options : any = []) => {
 
     return results;
 };
+
+export default image;

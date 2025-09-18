@@ -5,7 +5,17 @@ import { Song, MusicTrack, Dance, Karaoke, Cinematics } from '../types/godot';
 
 import logger from './logger';
 
-export default (
+/**
+ * Exports all necessary files to the map output folder.
+ * @param output Output folder
+ * @param mapName map name
+ * @param song Song descriptor
+ * @param musicTrack Music track
+ * @param dance Dance
+ * @param karaoke Karaoke
+ * @param cinematics Cinematics
+ */
+const exporter = (
     output: string, mapName: string, 
     song: Song, musicTrack: MusicTrack,
     dance: Dance, karaoke: Karaoke,
@@ -55,3 +65,5 @@ export default (
     )
     logger.success(`Exported cinematics file!`);
 };
+
+export default exporter;

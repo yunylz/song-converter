@@ -1,7 +1,12 @@
 import fs from "fs";
 import * as luaparse from 'luaparse';
 
-export default (input: string): any => {
+/**
+ * Parses a Lua file and returns its AST representation.
+ * @param input Input Lua file
+ * @returns 
+ */
+const lua = (input: string): any => {
   const content = fs.readFileSync(input, "utf8");
   
   try {
@@ -137,4 +142,6 @@ function getKeyValue(keyNode: any): string {
     default:
       return 'unknown';
   }
-}
+};
+
+export default lua;

@@ -3,7 +3,12 @@ import { glob } from "glob";
 import logger from "./logger";
 import { MapType } from "../types/godot";
 
-export default async (input: string): Promise<MapType | null> => {
+/**
+ * Detects the map type based on the files present in the input folder.
+ * @param input - Path to the input map folder.
+ * @returns {Promise<MapType|null>} The detected {@link MapType} or `null` if not found.
+ */
+const mapDetector = async (input: string): Promise<MapType | null> => {
   const files: Record<MapType, string[]> = {
     [MapType.P4]: [
       "SongDesc.tpl",
@@ -58,3 +63,5 @@ export default async (input: string): Promise<MapType | null> => {
     return null;
   }
 };
+
+export default mapDetector;

@@ -1,5 +1,10 @@
 import { Command } from "commander";
 
+/**
+ * Creates the CLI for the SongConverter.
+ * @param project Project metadata.
+ * @returns CLI instance.
+ */
 export default (project: { version: string }) => {
   const program = new Command();
 

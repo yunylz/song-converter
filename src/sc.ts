@@ -14,6 +14,9 @@ import movespace from "./lib/movespace";
 
 let project: { version: string };
 
+/**
+ * Main entry point for the SongConverter.
+ */
 (async () => {
   project = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
 
@@ -26,6 +29,7 @@ let project: { version: string };
   const skipAudio = !options.audio;
   const skipMenuart = !options.menuart;
 
+  // Check prerequisites
   checkPrerequisites();
 
   console.log(`SongConverter - made for JDBest`);
@@ -38,6 +42,7 @@ let project: { version: string };
 
   logger.info(`Detecting map type...`);
 
+  // Detect input's map type
   const mapType = await detectMapType(input);
 
   let mapResult: {
@@ -53,6 +58,7 @@ let project: { version: string };
     ambFiles: string[];
   };
 
+  // Based on map type
   switch (mapType) {
     case MapType.P4:
       mapResult = await p4(input, output,);

@@ -1,3 +1,7 @@
+
+/**
+ * UnitConverter class to handle conversions between beats, time (seconds), and ticks.
+ */
 class UnitConverter {
 
   markers: any;
@@ -5,6 +9,12 @@ class UnitConverter {
   ticksPerBeat: number;
   beatDurations: number[];
 
+  /**
+   * UnitConverter constructor to initialize the converter with markers, sample rate, and ticks per beat.
+   * @param markers Array of sample positions indicating beat markers.
+   * @param sampleRate Sample rate of the audio (default is 48000 Hz).
+   * @param ticksPerBeat Number of ticks per beat (default is 24).
+   */
   constructor(markers: string | any[], sampleRate = 48000, ticksPerBeat = 24) {
     this.markers = markers; // Sample positions from .trk
     this.sampleRate = sampleRate;
@@ -16,6 +26,11 @@ class UnitConverter {
     this.beatDurations.push(this.beatDurations[this.beatDurations.length - 1] || 0.4);
   };
 
+  /**
+   * Converts a beat number (can be fractional) to time in seconds.
+   * @param beatNumber Beat number to convert (can be fractional)
+   * @returns Time in seconds
+   */
   timeFromBeat(beatNumber: number) {
     const floorBeat = Math.floor(beatNumber);
     const fractionalBeat = beatNumber - floorBeat;
@@ -31,10 +46,20 @@ class UnitConverter {
     return startMarker + fractionalBeat * beatDuration;
   };
 
+  /**
+   * Converts a beat number (can be fractional) to ticks.
+   * @param beatNumber Beat number to convert (can be fractional)
+   * @returns Ticks corresponding to the given beat number
+   */
   ticksFromBeat(beatNumber: number) {
     return Math.floor(beatNumber * this.ticksPerBeat);
   };
 
+  /**
+   * Converts a time in seconds to a beat number (can be fractional).
+   * @param timeInSeconds Time in seconds to convert
+   * @returns Beat from the given time in seconds
+   */
   beatFromTime(timeInSeconds: number) {
     if (timeInSeconds < 0) {
       return timeInSeconds / this.beatDurations[0];
@@ -54,6 +79,10 @@ class UnitConverter {
     return prevBeat + (timeInSeconds - prevMarker) / lastBeatDuration;
   };
 
+  /**
+   * Gets the average BPM (Beats Per Minute) of the song.
+   * @returns Average BPM calculated from the beat durations.
+   */
   getBPM() {
     const avgBeatDuration = this.beatDurations.reduce((a, b) => a + b, 0) / this.beatDurations.length;
     return 60 / avgBeatDuration;

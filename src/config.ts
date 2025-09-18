@@ -1,3 +1,6 @@
+/**
+ * Default configuration for the SongConverter.
+ */
 export default {
     PICTOS_SIZE: [512, 512],
     COACH_SIZE : [1024, 1024],

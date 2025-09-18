@@ -1,5 +1,9 @@
 import { execSync } from "child_process";
 
+/**
+ * Checks if ImageMagick is installed.
+ * @returns True if ImageMagick is installed and accessible via PATH, false otherwise.
+ */
 export const imageMagickExists = () => {
     try {
         execSync("convert -version", { stdio: 'ignore' });
@@ -9,6 +13,10 @@ export const imageMagickExists = () => {
     }
 };
 
+/**
+ * Checks if FFmpeg is installed.
+ * @returns True if FFmpeg is installed and accessible via PATH, false otherwise.
+ */
 export const ffmpegExists = () => {
     try {
         execSync("ffmpeg -version", { stdio: 'ignore' });
@@ -18,6 +26,9 @@ export const ffmpegExists = () => {
     }
 };
 
+/**
+ * Checks if all prerequisites are installed.
+ */
 export const checkPrerequisites = () => {
     if (!imageMagickExists()) {
         throw new Error("ImageMagick is not installed or not found in PATH. Please install it from https://imagemagick.org/script/download.php");

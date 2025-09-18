@@ -7,7 +7,13 @@ import image from "./image";
 
 const menuartExtensions = [".png", ".jpg", ".jpeg", ".tga", ".bmp", ".gif"];
 
-export default async (inputFolder: string, outputFolder: string) => {
+/**
+ * Converts given MenuArt folder's images to JDBest foramt.
+ * @param inputFolder Input Menuart folder
+ * @param outputFolder Output path
+ * @returns 
+ */
+const menuArt = async (inputFolder: string, outputFolder: string) => {
     const pictosOutput = path.resolve(outputFolder, "menuart");
     if (!fs.existsSync(pictosOutput)) {
         fs.mkdirSync(pictosOutput, { recursive: true });
@@ -57,3 +63,5 @@ export default async (inputFolder: string, outputFolder: string) => {
 
     return results;
 };
+
+export default menuArt;

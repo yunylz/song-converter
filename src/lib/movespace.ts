@@ -2,7 +2,14 @@ import fs from "fs";
 import path from "path";
 import logger from "./logger";
 
-export default (inputFolder: string, outputFolder: string) => {
+/**
+ * Copies movespace/gestures files from input to JDBest moves folder.
+ * If moves folder has multiple console folders, it grabs by *.msm and *.gesture files.
+ * @param inputFolder Input of the moves folder
+ * @param outputFolder Output of JDBest map folder
+ * @returns 
+ */
+const movespace = (inputFolder: string, outputFolder: string) => {
     outputFolder = path.resolve(outputFolder, "timeline/moves");
     if (!fs.existsSync(outputFolder)) {
         fs.mkdirSync(outputFolder, { recursive: true });
@@ -73,3 +80,5 @@ export default (inputFolder: string, outputFolder: string) => {
 
     return { success, failed, movespace, gesture };
 };
+
+export default movespace;

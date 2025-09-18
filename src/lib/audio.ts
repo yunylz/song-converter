@@ -9,6 +9,13 @@ import { execSync } from 'child_process';
 
 export const audioExtensions = [".wav"];
 
+/**
+ * Converts an audio file to the required Godot format.
+ * @param input Input audio file
+ * @param outputFolder Map output folder
+ * @param isAmb Is ambient audio?
+ * @returns 
+ */
 const convert = async (input: string, outputFolder: string, isAmb = false): Promise<boolean> => {
   const output = path.resolve(outputFolder, isAmb ? "audio/amb" : "audio", path.basename(input.toLowerCase()));
   const outputDir = path.dirname(output);

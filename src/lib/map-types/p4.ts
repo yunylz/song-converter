@@ -27,6 +27,11 @@ type FileEntry = {
     isMainSequence?: boolean;
 };
 
+/**
+ * Converts a P4 map folder to JDBest format.
+ * @param input Input folder path.
+ * @param output Output folder path.
+ */
 export default async (
     input: string,
     output: string,
