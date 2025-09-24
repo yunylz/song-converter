@@ -17,19 +17,28 @@ export const audioExtensions = [".wav"];
  * @returns 
  */
 const convert = async (input: string, outputFolder: string, isAmb = false): Promise<boolean> => {
-  const output = path.resolve(outputFolder, isAmb ? "audio/amb" : "audio", path.basename(input.toLowerCase()));
+  const output = path.resolve(
+    outputFolder,
+    isAmb ? "audio/amb" : "audio",
+    path.basename(input.toLowerCase().replace(path.extname(input), ".m4a")) // change extension to .m4a
+  );
   const outputDir = path.dirname(output);
 
   if (fs.existsSync(output)) {
     logger.warn(`Audio file already exists, it will be overwritten!`);
-  };
+  }
 
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
-  };
+  }
 
   try {
-    await convertAudio(input, output, ["-ac", "2", "-ar", "48000", "-c:a", "pcm_f32le"]);
+    await convertAudio(input, output, [
+      "-ac", "2",             // stereo
+      "-ar", "48000",         // sample rate
+      "-c:a", "aac",          // AAC codec
+      "-b:a", "192k"          // bitrate
+    ]);
     return true;
   } catch (err: any) {
     logger.error(`Failed to convert main audio: ${err.message}`);

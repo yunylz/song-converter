@@ -91,22 +91,27 @@ export const convertDash = (args: string[]): Promise<void> => {
     return new Promise((resolve, reject) => {
         if (!args || args.length === 0) return reject(new Error("No ffmpeg arguments provided"));
 
-        // FFmpeg command: input is included in args with "-i"
-        const inputIndex = args.findIndex(a => a === "-i");
-        if (inputIndex === -1 || inputIndex + 1 >= args.length) {
-            return reject(new Error("No input file specified in args"));
-        }
+        // Extract input(s)
+        const inputIndexes = args
+            .map((v, i) => (v === "-i" ? i : -1))
+            .filter(i => i !== -1);
 
-        const input = args[inputIndex + 1];
-        const command: FfmpegCommand = ffmpeg(input);
+        if (inputIndexes.length === 0) return reject(new Error("No input specified in args"));
 
-        // Pass all args except "-i input"
-        const outputArgs = [...args];
-        outputArgs.splice(inputIndex, 2); // remove "-i" and input
+        const command: FfmpegCommand = ffmpeg();
 
-        if (outputArgs.length > 0) {
-            command.outputOptions(outputArgs);
-        }
+        inputIndexes.forEach(i => {
+            command.input(args[i + 1]);
+        });
+
+        // Remove inputs from args to leave only options + output
+        const filteredArgs = args.filter((_, idx) => !inputIndexes.includes(idx) && !inputIndexes.includes(idx - 1));
+        if (filteredArgs.length === 0) return reject(new Error("No output specified"));
+
+        // Last argument is the output file (master.mpd)
+        const output = filteredArgs.pop() as string;
+
+        if (filteredArgs.length > 0) command.outputOptions(filteredArgs);
 
         const progressBar = new cliProgress.SingleBar({
             format: 'Converting DASH [{bar}] {percentage}% | ETA: {eta_formatted}',
@@ -118,17 +123,15 @@ export const convertDash = (args: string[]): Promise<void> => {
         let duration: number | undefined;
 
         command
-            .on('start', (cmd) => {
-                logger.info(`FFmpeg started with command: ${cmd}`);
-            })
-            .on('codecData', (data) => {
+            .on('start', cmd => logger.info(`FFmpeg started with command: ${cmd}`))
+            .on('codecData', data => {
                 if (data.duration) {
                     const parts = data.duration.split(':').map(Number);
                     duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
                     progressBar.start(100, 0);
                 }
             })
-            .on('progress', (progress) => {
+            .on('progress', progress => {
                 if (duration && progress.timemark) {
                     const parts = progress.timemark.split(':').map(Number);
                     const seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
@@ -136,7 +139,7 @@ export const convertDash = (args: string[]): Promise<void> => {
                     progressBar.update(percent);
                 }
             })
-            .on('error', (err) => {
+            .on('error', err => {
                 progressBar.stop();
                 logger.error(`Error converting DASH: ${err.message}`);
                 reject(err);
@@ -146,7 +149,7 @@ export const convertDash = (args: string[]): Promise<void> => {
                 progressBar.stop();
                 resolve();
             })
-            .run(); // don't call save() because DASH produces multiple outputs
+            .save(output); // Use the last argument as the output file
     });
 };
 
