@@ -1,38 +1,40 @@
-import { Command } from "commander";
+import inquirer from "inquirer";
+import fs from "fs";
 
-/**
- * Creates the CLI for the SongConverter.
- * @param project Project metadata.
- * @returns CLI instance.
- */
-export default (project: { version: string }) => {
-  const program = new Command();
+export enum Workflow {
+  PROCESS_MAP = "Process Map (Full Automation - No Video)",
+  CONVERT_VIDEO = "Convert Video (Mix -> DASH -> S3 Private)",
+  EXIT = "Exit"
+}
 
-  program
-    .name("sc")
-    .description("SongConverter, made for JDBest.")
-    .version(project.version)
-    .option("-i, --input <path>", "Path to input map folder")
-    .option("-o, --output <path>", "Path to output folder")
-    .option("-p, --no-pictos", "Skip pictos conversion")
-    .option("-m, --no-moves", "Skip moves conversion")
-    .option("-a, --no-audio", "Skip audio conversion")
-    .option("-M, --no-menuart", "Skip menuart conversion")
-    .option("-v, --no-video", "Skip video conversion");
+export interface CLIOptions {
+  workflow: Workflow;
+  input: string;
+}
 
-  program.parse(process.argv);
+export default async (): Promise<CLIOptions> => {
+  const answers = await inquirer.prompt([
+    {
+      type: "rawlist",
+      name: "workflow",
+      message: "What would you like to do?",
+      choices: [Workflow.PROCESS_MAP, Workflow.CONVERT_VIDEO, Workflow.EXIT],
+    },
+    {
+      type: "input",
+      name: "input",
+      message: "Path to input map folder:",
+      when: (a) => a.workflow !== Workflow.EXIT,
+      validate: (val) => fs.existsSync(val) || "Directory does not exist!",
+    }
+  ]);
 
-  const options = program.opts<{
-    input: string; output: string,
-    pictos: boolean, moves: boolean, audio: boolean, menuart: boolean,
-    video: boolean
-  }>();
-
-  // Show help if no options are provided
-  if (!process.argv.slice(2).length) {
-    program.outputHelp();
-    process.exit(0); // exit after showing help
+  if (answers.workflow === Workflow.EXIT) {
+    process.exit(0);
   }
 
-  return options;
+  return {
+    workflow: answers.workflow,
+    input: answers.input
+  };
 };

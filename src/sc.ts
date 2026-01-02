@@ -1,164 +1,146 @@
-import fs from "fs";
+import fs from "fs-extra";
+import path from "path";
+import dotenv from "dotenv";
+import inquirer from "inquirer"; // Added for the resume prompt
+dotenv.config();
 
-import cli from "./cli";
+import cli, { Workflow } from "./cli";
 import logger from "./lib/logger";
 import detectMapType from "./lib/map-detector";
 import p4 from "./lib/map-types/p4";
 import pictos from "./lib/pictos";
-import { checkPrerequisites } from "./lib/prerequisites";
-
-import { Dance, Karaoke, MapType, MusicTrack, Song } from "./types/godot";
 import menuart from "./lib/menuart";
-import audio from "./lib/audio";
 import movespace from "./lib/movespace";
 import video from "./lib/video";
+import dash from "./lib/dash";
+import zip from "./lib/zip";
+import strapi from "./lib/strapi";
+import { uploadSong, uploadDash } from "./lib/s3";
+import { checkPrerequisites } from "./lib/prerequisites";
 
-let project: { version: string };
-
-/**
- * Main entry point for the SongConverter.
- */
 (async () => {
-  project = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
+  try {
+    checkPrerequisites();
 
-  const options = cli(project);
+    const options = await cli();
+    const { input, workflow } = options;
+    
+    // Define workspace based on workflow
+    const WORK_DIR = workflow === Workflow.PROCESS_MAP ? "./tmp_map_process" : "./tmp_video_process";
 
-  const input = options.input;
-  const output = options.output;
-  const skipPictos = !options.pictos;
-  const skipMoves = !options.moves;
-  const skipAudio = !options.audio;
-  const skipMenuart = !options.menuart;
-  const skipVideo = !options.video;
+    logger.info(`Starting Workflow: ${workflow}`);
 
-  // Check prerequisites
-  checkPrerequisites();
+    const mapType = await detectMapType(input);
+    const version = Date.now();
 
-  console.log(`SongConverter - made for JDBest`);
-  console.log(`----------------------------------`);
-  console.log(``);
+    // --- RESUME LOGIC ---
+    let resumeMode = false;
+    if (fs.existsSync(WORK_DIR) && fs.readdirSync(WORK_DIR).length > 0) {
+      const { resume } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "resume",
+          message: "⚠️  Found previous unfinished files. Skip processing and resume upload?",
+          default: true,
+        },
+      ]);
+      resumeMode = resume;
+    }
 
-  console.log(`Input: ${input}`);
-  console.log(`Output: ${output}`);
-  console.log(``);
-
-  logger.info(`Detecting map type...`);
-
-  // Detect input's map type
-  const mapType = await detectMapType(input);
-
-  let mapResult: {
-    mapName: string;
-    song: Song;
-    musicTrack: MusicTrack;
-    dance: Dance;
-    karaoke: Karaoke;
-    pictosPath: string;
-    movesPath: string;
-    menuArtPath: string;
-    audioPath: string;
-    ambFiles: string[];
-    videoPath: string | null;
-  };
-
-  // Based on map type
-  switch (mapType) {
-    case MapType.P4:
-      mapResult = await p4(input, output,);
-      break;
-    case MapType.UAF:
-      logger.warn(`Converting UAF map type is not supported yet.`);
-      process.exit(1);
-      break;
-    case MapType.NOW:
-      logger.warn(`Converting NOW map type is not supported yet.`);
-      process.exit(1);
-      break;
-    default:
-      logger.error(`Could not detect map type.`);
-      process.exit(1);
-  };
-
-  logger.success(`Done! Files were converted successfully.`);
-  logger.info(`Pictos, Moves and Audio will be processed...`);
-
-  if (!skipPictos) {
-    const pictosResult = await pictos(mapResult.pictosPath, output);
-    if (pictosResult.success > 0) {
-      logger.success(`Pictos processed: ${pictosResult.success} successful, ${pictosResult.failed} failed.`);
+    if (!resumeMode) {
+      // Clean slate if not resuming
+      if (fs.existsSync(WORK_DIR)) fs.removeSync(WORK_DIR);
+      fs.ensureDirSync(WORK_DIR);
     } else {
-      logger.warn(`No pictos were processed.`);
-    };
-  } else {
-    logger.warn(`Pictos processing was skipped.`);
-  };
+      logger.info("Resuming previous session...");
+    }
 
-  if (!skipMoves) {
-    const movesResult = await movespace(mapResult.movesPath, output);
-    if (movesResult.success > 0) {
-      logger.success(`Moves processed: ${movesResult.success} successful, ${movesResult.failed} failed.`);
-      if (movesResult.movespace > 0) {
-        logger.info(` - Movespace files: ${movesResult.movespace}`);
-      };
-      if (movesResult.gesture > 0) {
-        logger.info(` - Gesture files: ${movesResult.gesture}`);
-      };
-    } else {
-      logger.warn(`No moves were processed.`);
-    };
-  };
+    // 1. Get Metadata (Always needed for S3/Strapi paths)
+    // We use skipExport=true so we don't overwrite existing JSONs in tmp if resuming
+    const mapResult = await p4(input, WORK_DIR, version, true);
 
-  if (!skipMenuart) {
-    const menuArtResult = await menuart(mapResult.menuArtPath, output);
-    if (menuArtResult.success > 0) {
-      logger.success(`Menuart processed: ${menuArtResult.success} successful, ${menuArtResult.failed} failed.`);
-    } else {
-      logger.warn(`No menuart were processed.`);
-    };
-  }
-  else {
-    logger.warn(`Menuart processing was skipped.`);
-  }
 
-  if (!skipAudio) {
-    const audioResult = await audio.convert(mapResult.audioPath, output);
-    if (audioResult) {
-      logger.success(`Main audio processed successfully!`);
-    } else {
-      logger.warn(`No audio were processed.`);
-    };
+    // --- WORKFLOW 1: FULL PROCESS (NO VIDEO) ---
+    if (workflow === Workflow.PROCESS_MAP) {
+      
+      // Only generate files if NOT resuming
+      if (!resumeMode) {
+        // Re-run p4 to actually write the JSON files to WORK_DIR
+        await p4(input, WORK_DIR, version, false);
 
-    if (mapResult.ambFiles.length > 0) {
-      logger.info(`Processing ${mapResult.ambFiles.length} amb files...`);
-      for (const ambFile of mapResult.ambFiles) {
-        const ambResult = await audio.convert(ambFile, output, true);
-        if (ambResult) {
-          logger.success(`AMB audio processed successfully!`);
-        } else {
-          logger.warn(`No AMB audio were processed.`);
-        };
-      };
-      logger.success(`All AMB audio processed successfully!`);
-    };
-  }
-  else {
-    logger.warn(`Audio processing was skipped.`);
-  };
+        logger.info("Processing map components...");
+        await pictos(mapResult.pictosPath, WORK_DIR);
+        await movespace(mapResult.movesPath, WORK_DIR);
+        await menuart(mapResult.menuArtPath, WORK_DIR);
+      }
 
-  if (!skipVideo) {
-    if (!mapResult.videoPath) {
-      logger.warn(`No video was found, skipping video processing.`);
-    } else {
-      logger.info(`Processing ${mapResult.videoPath}...`);
-      const videoResult = await video.process(mapResult.videoPath, output, mapResult.mapName);
-      if (videoResult) {
-        logger.success(`Video processed successfully!`);
+      // --- Upload Stage (Runs for both New and Resume) ---
+      
+      const zipPath = path.resolve(WORK_DIR, `bundle.zip`);
+      
+      // If resuming, check if zip exists. If missing, create it.
+      if (!fs.existsSync(zipPath)) {
+        logger.info("Zipping bundle...");
+        await zip(WORK_DIR, zipPath);
       } else {
-        logger.warn(`No video were processed.`);
-      };
-    };
-  }
-  else {
-    logger.warn(`Video processing was skipped.`);
+        logger.info("Using existing bundle.zip");
+      }
+      
+      logger.info("Uploading to CDN...");
+      await uploadSong(mapResult.song, WORK_DIR);
+
+      await strapi.syncSong(mapResult.song, version);
+
+      logger.info("Cleaning up temporary workspace...");
+      fs.removeSync(WORK_DIR);
+    } 
+
+    // --- WORKFLOW 2: CONVERT VIDEO -> DASH -> S3 PRIVATE ---
+    else if (workflow === Workflow.CONVERT_VIDEO) {
+      
+      const dashOutputDir = path.join(WORK_DIR, "dash_out");
+      const mixedVideoPath = path.join(WORK_DIR, `${mapResult.mapName}_Mixed.webm`);
+
+      if (!resumeMode) {
+        if (mapResult.videoPath) {
+          // 1. Mix Video
+          logger.info(`Mixing AMBs and Syncing Video for ${mapResult.mapName}...`);
+          const videoSuccess = await video.process({
+            ambFiles: mapResult.ambFiles,
+            audioPath: mapResult.audioPath,
+            videoPath: mapResult.videoPath,
+            musicTrack: mapResult.musicTrack,
+            mainSequence: mapResult.mainSequence,
+            output: mixedVideoPath
+          });
+          if (!videoSuccess) throw new Error("Video mixing failed.");
+
+          // 2. Convert DASH
+          const dashSuccess = await dash.processDash(mapResult.mapName, mixedVideoPath, dashOutputDir);
+          if (!dashSuccess) throw new Error("DASH conversion failed.");
+
+        } else {
+          throw new Error("No video file detected.");
+        }
+      }
+
+      // --- Upload Stage ---
+      // Verify DASH files exist before trying to upload
+      if (fs.existsSync(dashOutputDir) && fs.readdirSync(dashOutputDir).length > 0) {
+        logger.info("Uploading DASH stream to Private S3...");
+        await uploadDash(mapResult.mapName, dashOutputDir);
+
+        logger.info("Cleaning up temporary video workspace...");
+        fs.removeSync(WORK_DIR);
+      } else {
+        logger.error("DASH output not found. Cannot resume upload.");
+        process.exit(1);
+      }
+    }
+
+    logger.success("All tasks finished successfully.");
+  } catch (error: any) {
+    logger.error(`Fatal Error: ${error.message}`);
+    process.exit(1);
   }
 })();

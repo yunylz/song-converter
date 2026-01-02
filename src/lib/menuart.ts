@@ -14,7 +14,7 @@ const menuartExtensions = [".png", ".jpg", ".jpeg", ".tga", ".bmp", ".gif"];
  * @returns 
  */
 const menuArt = async (inputFolder: string, outputFolder: string) => {
-    const menuArtOutput = path.resolve(outputFolder, "menuart");
+    const menuArtOutput = path.resolve(outputFolder, "assets/menuart");
     if (!fs.existsSync(menuArtOutput)) {
         fs.mkdirSync(menuArtOutput, { recursive: true });
     };
@@ -48,7 +48,12 @@ const menuArt = async (inputFolder: string, outputFolder: string) => {
             size = config.ALBUMBKG_SIZE;
         } else if (name.toLowerCase().includes("cover_generic")) {
             size = config.COVER_GENERIC_SIZE;
-        } else continue; // Skip unsupported menuart
+        } else if (name.toLowerCase().includes("banner_bkg")) {
+            size = config.BANNER_BKG_SIZE;
+        } else if (name.toLowerCase().includes("map_bkg")) {
+            size = config.MAP_BKG_SIZE;
+        }
+        else continue; // Skip unsupported menuart
 
         const textureInput = path.resolve(inputFolder, texture);
         const textureOutput = path.resolve(menuArtOutput, `${name.toLowerCase()}.png`);

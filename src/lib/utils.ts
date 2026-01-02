@@ -24,7 +24,7 @@ const generateRandomNumber = (min = 1000000000, max = 4294967295): number => {
  * @param array Array to shuffle.
  * @returns The shuffled array (same reference).
  */
-const shuffleArray = <T>(array: T[]): T[] => {
+export const shuffleArray = <T>(array: T[]): T[] => {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
@@ -40,18 +40,18 @@ const shuffleArray = <T>(array: T[]): T[] => {
  * @returns Engine-relative lowercase path.
  */
 export const fixEnginePath = (mapName: string, filePath: string, type: "move" | "picto" | "audio"): string => {
-    const songBaseFolder = `res://maps/${mapName}/`;
+    const songBaseFolder = `/`;
     let finalPath : string;
     switch (type) {
         case "move":
-            finalPath = path.join("timeline/moves", path.basename(filePath));
+            finalPath = path.join("dance/classifiers", path.basename(filePath));
             break;
         case "picto":
-            finalPath = path.join("timeline/pictos", path.basename(filePath));
+            finalPath = path.join("dance/pictos", path.basename(filePath));
             finalPath = finalPath.replace(".tga", ".png");
             break;
         case "audio":
-            finalPath = path.join("audio", path.basename(filePath));
+            finalPath = path.join("assets", path.basename(filePath));
             break;
         default:
             logger.warn(`Unknown asset type "${type}", not fixing path.`);

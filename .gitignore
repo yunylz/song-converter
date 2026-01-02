@@ -4,3 +4,19 @@ package-lock.json
 
 input/
 output/
+
+.env
+
+!.env.default
+
+versions.json
+songDb.json
+
+src/tests
+
+id=1*
+
+tests/audio
+tests/dash
+
+tmp_*

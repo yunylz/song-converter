@@ -81,6 +81,7 @@ export interface Song {
   class: "SongDescriptor";
   originalJDVersion: number;
   mapName: string;
+  version: number;
   title: string;
   artist: string;
   difficulty: Difficulty;
@@ -166,7 +167,7 @@ export interface KaraokeClip {
   startTime: number;
   duration: number;
   lyrics: string;
-  isEndOfLine: number;
+  isEndOfLine: boolean;
   contentType: number;
 }
 

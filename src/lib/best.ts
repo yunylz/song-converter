@@ -25,6 +25,7 @@ import {
     parseGameModeStatus,
     parseNumCoach,
     parseSweatDifficulty,
+    shuffleArray,
 } from "./utils";
 import exporter from "./exporter";
 import logger from "./logger";
@@ -54,11 +55,12 @@ const best = ({
     mainSequence,
     isJD5
 }: BestArgs) => {
-    const { title, artist, difficulty, sweatDifficulty, numCoach, flags, status, mode, backgroundType, lyricsType, localeID, mojoValue } = songDesc;
+    const { title, artist, difficulty, sweatDifficulty, numCoach, flags, status, mode, backgroundType, lyricsType, localeID, mojoValue, version } = songDesc;
     /** ---------------- Song ---------------- */
     const song: Song = {
         class: "SongDescriptor",
         mapName,
+        version: version,
         originalJDVersion: assureJDVersion(typeof jdVersion === "number" ? jdVersion : parseInt(String(jdVersion)) || 0),
         title: title || "",
         artist: artist || "",
@@ -103,73 +105,77 @@ const best = ({
     };
 
     /** ---------------- Dance ---------------- */
+    const danceClips = dtape
+        ? dtape.params.Tape.Clips.map((clip) => {
+            if (clip.MotionClip) {
+                return {
+                    class: "MotionClip",
+                    id: clip.MotionClip.Id,
+                    trackId: clip.MotionClip.TrackId,
+                    isActive: clip.MotionClip.IsActive,
+                    startTime: clip.MotionClip.StartTime,
+                    duration: clip.MotionClip.Duration,
+                    classifierPath: fixEnginePath(mapName, clip.MotionClip.ClassifierPath, "move"),
+                    goldMove: clip.MotionClip.GoldMove || 0,
+                    coachId: clip.MotionClip.CoachId || 0,
+                    moveType: clip.MotionClip.MoveType || 0,
+                };
+            }
+            if (clip.GoldEffectClip) {
+                return {
+                    class: "GoldEffectClip",
+                    id: clip.GoldEffectClip.Id,
+                    trackId: clip.GoldEffectClip.TrackId,
+                    isActive: clip.GoldEffectClip.IsActive,
+                    startTime: clip.GoldEffectClip.StartTime,
+                    duration: clip.GoldEffectClip.Duration,
+                    effectType: clip.GoldEffectClip.EffectType,
+                };
+            }
+            if (clip.PictogramClip) {
+                return {
+                    class: "PictogramClip",
+                    id: clip.PictogramClip.Id,
+                    trackId: clip.PictogramClip.TrackId,
+                    isActive: clip.PictogramClip.IsActive,
+                    startTime: clip.PictogramClip.StartTime,
+                    duration: 24, // 1 beat = 24 ticks
+                    pictoPath: fixEnginePath(mapName, clip.PictogramClip.PictoPath, "picto"),
+                    atlasPath: fixEnginePath(mapName, "pictos-atlas.json", "picto"),
+                };
+            }
+            return undefined;
+        }).filter(Boolean) as (MotionClip | PictoClip | GoldEffectClip)[]
+        : [];
+
     const dance: Dance = {
         class: "Dance",
-        clips: dtape
-            ? dtape.params.Tape.Clips.map((clip) => {
-                if (clip.MotionClip) {
-                    return {
-                        class: "MotionClip",
-                        id: clip.MotionClip.Id,
-                        trackId: clip.MotionClip.TrackId,
-                        isActive: clip.MotionClip.IsActive,
-                        startTime: clip.MotionClip.StartTime,
-                        duration: clip.MotionClip.Duration,
-                        classifierPath: fixEnginePath(mapName, clip.MotionClip.ClassifierPath, "move"),
-                        goldMove: clip.MotionClip.GoldMove || 0,
-                        coachId: clip.MotionClip.CoachId || 0,
-                        moveType: clip.MotionClip.MoveType || 0,
-                    };
-                }
-                if (clip.GoldEffectClip) {
-                    return {
-                        class: "GoldEffectClip",
-                        id: clip.GoldEffectClip.Id,
-                        trackId: clip.GoldEffectClip.TrackId,
-                        isActive: clip.GoldEffectClip.IsActive,
-                        startTime: clip.GoldEffectClip.StartTime,
-                        duration: clip.GoldEffectClip.Duration,
-                        effectType: clip.GoldEffectClip.EffectType,
-                    };
-                }
-                if (clip.PictogramClip) {
-                    return {
-                        class: "PictogramClip",
-                        id: clip.PictogramClip.Id,
-                        trackId: clip.PictogramClip.TrackId,
-                        isActive: clip.PictogramClip.IsActive,
-                        startTime: clip.PictogramClip.StartTime,
-                        duration: 24, // 1 beat = 24 ticks
-                        pictoPath: fixEnginePath(mapName, clip.PictogramClip.PictoPath, "picto"),
-                    };
-                }
-                return undefined;
-            }).filter(Boolean) as (MotionClip | PictoClip | GoldEffectClip)[]
-            : [],
+        clips: shuffleArray(danceClips), // Shuffle the dance clips
         mapName,
     };
 
     /** ---------------- Karaoke ---------------- */
+    const karaokeClips = ktape?.params.Tape.Clips
+        .map((clip) =>
+            clip.KaraokeClip
+                ? {
+                    class: "KaraokeClip",
+                    id: clip.KaraokeClip.Id,
+                    trackId: clip.KaraokeClip.TrackId,
+                    isActive: clip.KaraokeClip.IsActive,
+                    startTime: clip.KaraokeClip.StartTime,
+                    duration: clip.KaraokeClip.Duration,
+                    lyrics: clip.KaraokeClip.Lyrics,
+                    isEndOfLine: clip.KaraokeClip.IsEndOfLine == 1 ? true : false,
+                    contentType: clip.KaraokeClip.ContentType,
+                }
+                : undefined
+        )
+        .filter(Boolean) as KaraokeClip[] || [];
+
     const karaoke: Karaoke = {
         class: "Karaoke",
-        clips:
-            ktape?.params.Tape.Clips
-                .map((clip) =>
-                    clip.KaraokeClip
-                        ? {
-                            class: "KaraokeClip",
-                            id: clip.KaraokeClip.Id,
-                            trackId: clip.KaraokeClip.TrackId,
-                            isActive: clip.KaraokeClip.IsActive,
-                            startTime: clip.KaraokeClip.StartTime,
-                            duration: clip.KaraokeClip.Duration,
-                            lyrics: clip.KaraokeClip.Lyrics,
-                            isEndOfLine: clip.KaraokeClip.IsEndOfLine,
-                            contentType: clip.KaraokeClip.ContentType,
-                        }
-                        : undefined
-                )
-                .filter(Boolean) as KaraokeClip[] || [],
+        clips: shuffleArray(karaokeClips), // Shuffle the karaoke clips
         mapName,
     };
 
