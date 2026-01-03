@@ -1,26 +1,27 @@
 import ffmpeg, { FfmpegCommand } from 'fluent-ffmpeg';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process'; // Added spawn
 import cliProgress from "cli-progress";
-
 import logger from "./logger";
+import path from 'path';
+
+// Try to resolve ffmpeg-static, fallback to system ffmpeg if not installed
+let ffmpegPath = 'ffmpeg';
+try {
+  ffmpegPath = require('ffmpeg-static');
+} catch (e) {
+  // ffmpeg-static not found, relying on system PATH
+}
 
 /**
  * Converts an audio file with FFmpeg.
- * @param input Input audio file
- * @param output Output audio file
- * @param args Arguments
- * @returns 
  */
 export const convertAudio = (input: string, output: string, args: string[] = []): Promise<void> => {
   return new Promise((resolve, reject) => {
     const command: FfmpegCommand = ffmpeg(input);
-    // Apply custom ffmpeg arguments if provided
     if (args.length > 0) {
       command.outputOptions(args);
     }
     command
-      .on('start', (cmd) => {
-      })
       .on('progress', (progress) => {
         logger.info(`Processing: ${progress.percent?.toFixed(2)}% done`);
       })
@@ -35,8 +36,6 @@ export const convertAudio = (input: string, output: string, args: string[] = [])
   });
 };
 
-// TODO: maybe these two commands should be merged? -yunyl
-
 export const convertVideo = (input: string, output: string, args: string[] = []): Promise<void> => {
     return new Promise((resolve, reject) => {
         const command: FfmpegCommand = ffmpeg(input);
@@ -45,7 +44,6 @@ export const convertVideo = (input: string, output: string, args: string[] = [])
             command.outputOptions(args);
         }
 
-        // Create a CLI progress bar
         const progressBar = new cliProgress.SingleBar({
             format: 'Converting [{bar}] {percentage}% | ETA: {eta_formatted}',
             barCompleteChar: '#',
@@ -56,11 +54,7 @@ export const convertVideo = (input: string, output: string, args: string[] = [])
         let duration: number | undefined;
 
         command
-            .on('start', (cmd) => {
-                //logger.info(`FFmpeg started with command: ${cmd}`);
-            })
             .on('codecData', (data) => {
-                // Get duration in seconds
                 const timeParts = data.duration.split(':').map(Number);
                 duration = timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
                 progressBar.start(100, 0);
@@ -87,86 +81,89 @@ export const convertVideo = (input: string, output: string, args: string[] = [])
     });
 };
 
+/**
+ * Robust DASH converter using spawn() to capture full error logs.
+ */
 export const convertDash = (args: string[]): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        if (!args || args.length === 0) return reject(new Error("No ffmpeg arguments provided"));
+  return new Promise((resolve, reject) => {
+    if (!args || args.length === 0) return reject(new Error("No ffmpeg arguments provided"));
 
-        // Extract input(s)
-        const inputIndexes = args
-            .map((v, i) => (v === "-i" ? i : -1))
-            .filter(i => i !== -1);
+    logger.info(`FFmpeg started with command: ${ffmpegPath} ${args.join(" ")}`);
 
-        if (inputIndexes.length === 0) return reject(new Error("No input specified in args"));
+    const process = spawn(ffmpegPath, args);
+    
+    // Setup Progress Bar
+    const progressBar = new cliProgress.SingleBar({
+      format: 'Converting DASH |{bar}| {percentage}% | ETA: {eta_formatted}',
+      hideCursor: true
+    }, cliProgress.Presets.shades_classic);
 
-        const command: FfmpegCommand = ffmpeg();
+    let totalDuration = 0;
+    let errorLog: string[] = []; 
 
-        inputIndexes.forEach(i => {
-            command.input(args[i + 1]);
-        });
+    // Capture STDERR (Logs + Errors)
+    process.stderr.on('data', (data: Buffer) => {
+      const msg = data.toString();
+      
+      // Buffer last 20 lines for debugging
+      errorLog.push(msg);
+      if (errorLog.length > 20) errorLog.shift();
 
-        // Remove inputs from args to leave only options + output
-        const filteredArgs = args.filter((_, idx) => !inputIndexes.includes(idx) && !inputIndexes.includes(idx - 1));
-        if (filteredArgs.length === 0) return reject(new Error("No output specified"));
+      // Parse Duration
+      if (msg.includes("Duration: ")) {
+        const durationMatch = msg.match(/Duration: (\d{2}):(\d{2}):(\d{2})/);
+        if (durationMatch) {
+          const hours = parseInt(durationMatch[1]);
+          const mins = parseInt(durationMatch[2]);
+          const secs = parseInt(durationMatch[3]);
+          totalDuration = (hours * 3600) + (mins * 60) + secs;
+          progressBar.start(100, 0);
+        }
+      }
 
-        // Last argument is the output file (master.mpd)
-        const output = filteredArgs.pop() as string;
-
-        if (filteredArgs.length > 0) command.outputOptions(filteredArgs);
-
-        const progressBar = new cliProgress.SingleBar({
-            format: 'Converting DASH [{bar}] {percentage}% | ETA: {eta_formatted}',
-            barCompleteChar: '#',
-            barIncompleteChar: '-',
-            hideCursor: true
-        });
-
-        let duration: number | undefined;
-
-        command
-            .on('start', cmd => logger.info(`FFmpeg started with command: ${cmd}`))
-            .on('codecData', data => {
-                if (data.duration) {
-                    const parts = data.duration.split(':').map(Number);
-                    duration = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                    progressBar.start(100, 0);
-                }
-            })
-            .on('progress', progress => {
-                if (duration && progress.timemark) {
-                    const parts = progress.timemark.split(':').map(Number);
-                    const seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                    const percent = Math.min((seconds / duration) * 100, 100);
-                    progressBar.update(percent);
-                }
-            })
-            .on('error', err => {
-                progressBar.stop();
-                logger.error(`Error converting DASH: ${err.message}`);
-                reject(err);
-            })
-            .on('end', () => {
-                progressBar.update(100);
-                progressBar.stop();
-                resolve();
-            })
-            .save(output); // Use the last argument as the output file
+      // Parse Progress
+      if (msg.includes("time=")) {
+        const timeMatch = msg.match(/time=(\d{2}):(\d{2}):(\d{2})/);
+        if (timeMatch && totalDuration > 0) {
+          const hours = parseInt(timeMatch[1]);
+          const mins = parseInt(timeMatch[2]);
+          const secs = parseInt(timeMatch[3]);
+          const currentSeconds = (hours * 3600) + (mins * 60) + secs;
+          const percent = Math.min(100, (currentSeconds / totalDuration) * 100);
+          progressBar.update(percent);
+        }
+      }
     });
+
+    process.on('close', (code: number) => {
+      progressBar.stop();
+      if (code === 0) {
+        resolve();
+      } else {
+        logger.error("\n=== FFmpeg Error Dump ===");
+        console.error(errorLog.join(""));
+        logger.error("=========================");
+        reject(new Error(`ffmpeg exited with code ${code}`));
+      }
+    });
+
+    process.on('error', (err: Error) => {
+      progressBar.stop();
+      reject(err);
+    });
+  });
 };
 
 /**
  * Gets the sample rate of an audio file.
- * @param inputAudio Input audio file
- * @returns Sample rate in Hz
  */
 export const getSampleRate = (inputAudio: string): number => {
   try {
-    // Method 1: Try to find Nuendo XML in metadata
     const nuendoSampleRate = extractNuendoSampleRate(inputAudio);
     if (nuendoSampleRate > 0) {
       return nuendoSampleRate;
     }
 
-    // Method 2: Fallback to WAV sample rate using ffprobe
     const ffprobeCmd = `ffprobe -v quiet -print_format json -show_streams "${inputAudio}"`;
     const output = execSync(ffprobeCmd, { encoding: 'utf8' });
     const data = JSON.parse(output);
@@ -176,7 +173,7 @@ export const getSampleRate = (inputAudio: string): number => {
       return parseInt(audioStream.sample_rate);
     }
 
-    return 44100; // Default fallback
+    return 44100;
   } catch (error) {
     logger.error('Error extracting sample rate:', error);
     return 44100;
@@ -185,8 +182,6 @@ export const getSampleRate = (inputAudio: string): number => {
 
 /**
  * Extracts Nuendo beat markers from the audio file metadata.
- * @param inputAudio Input audio file
- * @returns Array of beat marker positions in milliseconds
  */
 export const extractBeatMarkers = (inputAudio: string): number[] => {
   try {
@@ -207,43 +202,136 @@ export const extractBeatMarkers = (inputAudio: string): number[] => {
         const startMatch = line.match(/START=(\d+)/);
         if (startMatch) {
           const startSample = parseInt(startMatch[1]);
-          // Convert to milliseconds: (samples / sampleRate) * 1000
           const startMs = (startSample / currentTimebase) * 1000;
           markers.push(Math.round(startMs));
         }
       }
     }
     
-    return markers.length > 0 ? markers : [0, 500]; // Default if no markers found
+    return markers.length > 0 ? markers : [0, 500];
     
   } catch (error) {
     logger.error('Error extracting beat markers:', error);
-    return [0, 500]; // Default markers
+    return [0, 500];
   }
 };
 
-/**
- * Extracts the Nuendo sample rate from the audio file metadata.
- * @param inputAudio Input audio file
- * @returns Nuendo sample rate in Hz
- */
 const extractNuendoSampleRate = (inputAudio: string): number => {
   try {
-    // Try to extract any XML metadata that might contain Nuendo data
     const xmlCmd = `ffmpeg -i "${inputAudio}" -map_metadata 0 -f wav - 2>/dev/null | strings | grep -E "<?xml|<obj|SampleRate" | head -10`;
     const xmlOutput = execSync(xmlCmd, { encoding: 'utf8' });
     
     if (xmlOutput.trim()) {
-      // Look for sample rate patterns in the XML
       const sampleRateMatch = xmlOutput.match(/SampleRate[">:=\s]*(\d+)/i);
       if (sampleRateMatch) {
         return parseInt(sampleRateMatch[1]);
       }
     }
-    
-    return 0; // No Nuendo data found
-    
+    return 0;
   } catch (error) {
-    return 0; // No Nuendo data found
+    return 0;
   }
+};
+
+/**
+ * Generates a 30s preview with fade in/out and scaling.
+ */
+export const createPreview = (
+  videoInput: string,
+  audioInput: string,
+  output: string,
+  startTime: number,
+  duration: number,
+  isDash: boolean = false
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const FADE_IN = 1;
+    const FADE_OUT = 5;
+    const fadeOutStart = duration - FADE_OUT;
+
+    const videoFilter = `[0:v]scale=-2:720,fade=t=in:st=0:d=${FADE_IN},fade=t=out:st=${fadeOutStart}:d=${FADE_OUT}[v]`;
+    const audioSource = (videoInput === audioInput) ? "[0:a]" : "[1:a]";
+    const audioFilter = `${audioSource}afade=t=in:st=0:d=${FADE_IN},afade=t=out:st=${fadeOutStart}:d=${FADE_OUT}[a]`;
+
+    const args: string[] = ["-y"];
+
+    // --- CRITICAL DASH FIXES ---
+    if (isDash) {
+      args.push(
+        "-allowed_extensions", "ALL",
+        "-protocol_whitelist", "file,crypto,data,http,tcp,https,tls"
+      );
+    }
+
+    // Seek and Input
+    // Prepend 'file:' if isDash to ensure the demuxer looks locally
+    const finalVideoInput = isDash ? `file:${path.resolve(videoInput)}` : videoInput;
+    const finalAudioInput = isDash ? `file:${path.resolve(audioInput)}` : audioInput;
+
+    args.push("-ss", String(startTime), "-i", finalVideoInput);
+
+    if (videoInput !== audioInput) {
+      args.push("-ss", String(startTime), "-i", finalAudioInput);
+    }
+
+    args.push(
+      "-t", String(duration),
+      "-filter_complex", `${videoFilter};${audioFilter}`,
+      "-map", "[v]",
+      "-map", "[a]",
+      "-c:v", "libx264",
+      "-preset", "fast",
+      "-c:a", "aac",
+      "-b:a", "128k",
+      "-movflags", "+faststart",
+      "-pix_fmt", "yuv420p",
+      output
+    )
+
+    // Reuse your robust spawn logic
+    let ffmpegPath = 'ffmpeg';
+    try { ffmpegPath = require('ffmpeg-static'); } catch (e) {}
+    
+    logger.info(`Generating preview: ${output}`);
+    // logger.info(`Command: ${ffmpegPath} ${args.join(" ")}`); // Uncomment to debug
+
+    const process = spawn(ffmpegPath, args);
+    
+    const progressBar = new cliProgress.SingleBar({
+      format: 'Rendering Preview |{bar}| {percentage}% | ETA: {eta_formatted}',
+      hideCursor: true
+    }, cliProgress.Presets.shades_classic);
+
+    // Since it's a fixed duration (e.g. 30s), we can just start the bar
+    progressBar.start(100, 0);
+
+    let errorLog: string[] = [];
+
+    process.stderr.on('data', (data: Buffer) => {
+      const msg = data.toString();
+      errorLog.push(msg);
+      if (errorLog.length > 20) errorLog.shift();
+
+      // Simple time parsing for progress
+      if (msg.includes("time=")) {
+        const timeMatch = msg.match(/time=(\d{2}):(\d{2}):(\d{2})/);
+        if (timeMatch) {
+          const secs = (parseInt(timeMatch[1]) * 3600) + (parseInt(timeMatch[2]) * 60) + parseInt(timeMatch[3]);
+          const percent = Math.min(100, (secs / duration) * 100);
+          progressBar.update(percent);
+        }
+      }
+    });
+
+    process.on('close', (code: number) => {
+      progressBar.stop();
+      if (code === 0) {
+        resolve();
+      } else {
+        logger.error("\n=== FFmpeg Preview Error ===");
+        console.error(errorLog.join(""));
+        reject(new Error(`ffmpeg exited with code ${code}`));
+      }
+    });
+  });
 };

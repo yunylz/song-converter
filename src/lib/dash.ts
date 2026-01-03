@@ -17,13 +17,15 @@ const QUALITIES: Quality[] = [
 ];
 
 /**
- * Converts a mixed video file into a DASH stream (MPEG-DASH).
+ * Converts a video file into a DASH stream (MPEG-DASH).
  */
 const processDash = async (
   mapName: string,
   videoInput: string,
-  outputDir: string
+  outputDir: string,
+  forceAudio: boolean = false
 ): Promise<boolean> => {
+  // Ensure output directory exists
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
   
   const outputFile = path.join(outputDir, "master.mpd");
@@ -31,6 +33,7 @@ const processDash = async (
   
   const args: string[] = [
     "-i", videoInput,
+    "-y", 
     
     // Global settings
     "-r", `${config.VIDEOSCOACH_FPS || 60}`,
@@ -39,7 +42,7 @@ const processDash = async (
     "-sc_threshold", "0",
   ];
   
-  // Map video streams (one per quality)
+  // Map video streams
   QUALITIES.forEach((q, i) => {
     args.push(
       "-map", "0:v:0",
@@ -50,21 +53,28 @@ const processDash = async (
       "-b:v:" + i, q.bitrate,
       "-maxrate:v:" + i, q.bitrate,
       "-bufsize:v:" + i, String(parseInt(q.bitrate) * 2) + "k",
-      "-s:v:" + i, `${q.width}x${q.height}`
+      "-s:v:" + i, `${q.width}x${q.height}`,
+      
+      // Force Aspect Ratio to 16:9 for ALL streams to fix DASH strictness
+      "-aspect:v:" + i, "16:9"
     );
   });
   
-  // Map audio stream
-  if (config.MUTE_VIDEOSCOACH) {
+  // Audio Logic
+  const shouldMute = config.MUTE_VIDEOSCOACH && !forceAudio;
+  let adaptationSets = "id=0,streams=v";
+
+  if (shouldMute) {
     args.push("-an");
   } else {
     args.push(
-      "-map", "0:a:0",
+      "-map", "0:a?", // Use wildcard to prevent crash if missing
       "-c:a", "aac",
       "-b:a", "128k",
       "-ac", "2",
       "-ar", "48000"
     );
+    adaptationSets += " id=1,streams=a";
   }
   
   // DASH output settings
@@ -74,10 +84,12 @@ const processDash = async (
     "-use_timeline", "1",
     "-use_template", "1",
     "-min_seg_duration", "4000000",
-    // FIX: Prepend outputDir so FFmpeg writes files to the correct folder, not root
-    "-init_seg_name", path.join(outputDir, "init_$RepresentationID$.m4s"),
-    "-media_seg_name", path.join(outputDir, "chunk_$RepresentationID$_$Number%05d$.m4s"),
-    "-adaptation_sets", "id=0,streams=v id=1,streams=a",
+    
+    // Filenames only (no paths), FFmpeg puts them in outputDir automatically
+    "-init_seg_name", "init_$RepresentationID$.m4s",
+    "-media_seg_name", "chunk_$RepresentationID$_$Number%05d$.m4s",
+    
+    "-adaptation_sets", adaptationSets,
     outputFile
   );
   

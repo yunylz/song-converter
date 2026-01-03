@@ -94,6 +94,7 @@ export interface Song {
   lyricsType: LyricsType;
   localeID: number;
   mojoValue: number;
+  lyricsColor: string;
 };
 
 export interface AudioPreview {

@@ -1,11 +1,15 @@
 import fs from "fs-extra";
 import path from "path";
 import dotenv from "dotenv";
-import inquirer from "inquirer"; // Added for the resume prompt
+import inquirer from "inquirer";
+import * as cliProgress from "cli-progress"; 
+
 dotenv.config();
 
-import cli, { Workflow } from "./cli";
+import cli, { Workflow, PreviewMode } from "./cli";
 import logger from "./lib/logger";
+import checkPrerequisites from "./lib/prerequisites"; 
+
 import detectMapType from "./lib/map-detector";
 import p4 from "./lib/map-types/p4";
 import pictos from "./lib/pictos";
@@ -15,76 +19,136 @@ import video from "./lib/video";
 import dash from "./lib/dash";
 import zip from "./lib/zip";
 import strapi from "./lib/strapi";
-import { uploadSong, uploadDash } from "./lib/s3";
-import { checkPrerequisites } from "./lib/prerequisites";
+import { uploadSong, uploadDash, checkDashExists, checkPreviewExists } from "./lib/s3";
+import { processFromMap, processFromDash, processFromVideo } from "./lib/preview";
 
 (async () => {
   try {
-    checkPrerequisites();
-
     const options = await cli();
-    const { input, workflow } = options;
-    
-    // Define workspace based on workflow
-    const WORK_DIR = workflow === Workflow.PROCESS_MAP ? "./tmp_map_process" : "./tmp_video_process";
+    const { input, workflow, mapName, previewMode } = options;
 
     logger.info(`Starting Workflow: ${workflow}`);
 
-    const mapType = await detectMapType(input);
-    const version = Date.now();
+    // --- WORKFLOW: CHECK MISSING DASH ---
+    if (workflow === Workflow.CHECK_MISSING_DASH) {
+        logger.info("Fetching song list from Strapi...");
+        const songs = await strapi.getAllSongs();
+        if (songs.length === 0) process.exit(0);
 
-    // --- RESUME LOGIC ---
+        logger.info(`Checking ${songs.length} songs for DASH streams...`);
+        const missing: string[] = [];
+        const bar = new cliProgress.SingleBar({ format: 'Checking |{bar}| {percentage}% | {value}/{total}', hideCursor: true });
+        bar.start(songs.length, 0);
+
+        for (const song of songs) {
+            const exists = await checkDashExists(song.mapName);
+            if (!exists) missing.push(song.mapName);
+            bar.increment();
+        }
+        bar.stop();
+        console.log("");
+        if (missing.length > 0) {
+            logger.warn(`Found ${missing.length} songs missing DASH streams:`);
+            missing.forEach(n => console.log(` - ${n}`));
+        } else {
+            logger.success("All songs have DASH streams available!");
+        }
+        process.exit(0);
+    }
+
+    // --- WORKFLOW: CHECK MISSING PREVIEWS ---
+    if (workflow === Workflow.CHECK_MISSING_PREVIEW) {
+        logger.info("Fetching song list from Strapi...");
+        const songs = await strapi.getAllSongs();
+        if (songs.length === 0) process.exit(0);
+
+        logger.info(`Checking ${songs.length} songs for Video Previews...`);
+        const missing: string[] = [];
+        const bar = new cliProgress.SingleBar({ format: 'Checking |{bar}| {percentage}% | {value}/{total}', hideCursor: true });
+        bar.start(songs.length, 0);
+
+        for (const song of songs) {
+            const exists = await checkPreviewExists(song.mapName);
+            if (!exists) missing.push(song.mapName);
+            bar.increment();
+        }
+        bar.stop();
+        console.log("");
+        if (missing.length > 0) {
+            logger.warn(`Found ${missing.length} songs missing Video Previews:`);
+            missing.forEach(n => console.log(` - ${n}`));
+        } else {
+            logger.success("All songs have Video Previews available!");
+        }
+        process.exit(0);
+    }
+
+    // --- WORKFLOW: CREATE PREVIEW ---
+    if (workflow === Workflow.CREATE_PREVIEW) {
+        const PREVIEW_WORK_DIR = "./tmp_preview";
+        if (fs.existsSync(PREVIEW_WORK_DIR)) fs.removeSync(PREVIEW_WORK_DIR);
+        fs.ensureDirSync(PREVIEW_WORK_DIR);
+
+        if (previewMode === PreviewMode.FROM_MAP) {
+            await processFromMap(input, PREVIEW_WORK_DIR);
+        } 
+        else if (previewMode === PreviewMode.FROM_DASH) {
+            if (!mapName) throw new Error("Map Name required");
+            await processFromDash(mapName, PREVIEW_WORK_DIR);
+        } 
+        else if (previewMode === PreviewMode.FROM_VIDEO) {
+            await processFromVideo(PREVIEW_WORK_DIR);
+        }
+
+        logger.info("Cleaning up preview workspace...");
+        fs.removeSync(PREVIEW_WORK_DIR);
+        logger.success("Preview creation and upload finished.");
+        process.exit(0);
+    }
+
+    // --- SHARED SETUP FOR MAIN WORKFLOWS ---
+    const WORK_DIR = (workflow === Workflow.PROCESS_MAP) 
+        ? "./tmp_map_process" 
+        : "./tmp_video_process";
+
     let resumeMode = false;
-    if (fs.existsSync(WORK_DIR) && fs.readdirSync(WORK_DIR).length > 0) {
-      const { resume } = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "resume",
-          message: "⚠️  Found previous unfinished files. Skip processing and resume upload?",
+
+    // Only allow resume for VIDEO workflows. 
+    if (workflow !== Workflow.PROCESS_MAP && fs.existsSync(WORK_DIR) && fs.readdirSync(WORK_DIR).length > 0) {
+      const { resume } = await inquirer.prompt([{
+          type: "confirm", 
+          name: "resume", 
+          message: "⚠️  Found previous unfinished files. Resume from upload?", 
           default: true,
-        },
-      ]);
+      }]);
       resumeMode = resume;
     }
 
     if (!resumeMode) {
-      // Clean slate if not resuming
       if (fs.existsSync(WORK_DIR)) fs.removeSync(WORK_DIR);
       fs.ensureDirSync(WORK_DIR);
     } else {
-      logger.info("Resuming previous session...");
+        logger.info("Resuming previous session...");
     }
 
-    // 1. Get Metadata (Always needed for S3/Strapi paths)
-    // We use skipExport=true so we don't overwrite existing JSONs in tmp if resuming
-    const mapResult = await p4(input, WORK_DIR, version, true);
+    const version = Date.now();
 
 
-    // --- WORKFLOW 1: FULL PROCESS (NO VIDEO) ---
+    // --- WORKFLOW: FULL PROCESS (MAP ONLY - NO VIDEO) ---
     if (workflow === Workflow.PROCESS_MAP) {
-      
-      // Only generate files if NOT resuming
-      if (!resumeMode) {
-        // Re-run p4 to actually write the JSON files to WORK_DIR
-        await p4(input, WORK_DIR, version, false);
+      let mapResult = await p4(input, WORK_DIR, version, true);
+      mapResult = await p4(input, WORK_DIR, version, false);
 
-        logger.info("Processing map components...");
-        await pictos(mapResult.pictosPath, WORK_DIR);
-        await movespace(mapResult.movesPath, WORK_DIR);
-        await menuart(mapResult.menuArtPath, WORK_DIR);
-      }
+      logger.info("Processing map components...");
+      await pictos(mapResult.pictosPath, WORK_DIR);
+      await movespace(mapResult.movesPath, WORK_DIR);
+      await menuart(mapResult.menuArtPath, WORK_DIR);
 
-      // --- Upload Stage (Runs for both New and Resume) ---
-      
+      if (!mapResult.song) throw new Error("Song data missing.");
+
       const zipPath = path.resolve(WORK_DIR, `bundle.zip`);
-      
-      // If resuming, check if zip exists. If missing, create it.
-      if (!fs.existsSync(zipPath)) {
-        logger.info("Zipping bundle...");
-        await zip(WORK_DIR, zipPath);
-      } else {
-        logger.info("Using existing bundle.zip");
-      }
+      logger.info("Zipping bundle...");
+      await zip(WORK_DIR, zipPath);
       
       logger.info("Uploading to CDN...");
       await uploadSong(mapResult.song, WORK_DIR);
@@ -95,15 +159,15 @@ import { checkPrerequisites } from "./lib/prerequisites";
       fs.removeSync(WORK_DIR);
     } 
 
-    // --- WORKFLOW 2: CONVERT VIDEO -> DASH -> S3 PRIVATE ---
+
+    // --- WORKFLOW: CONVERT VIDEO (AMB MIXING -> DASH) ---
     else if (workflow === Workflow.CONVERT_VIDEO) {
-      
+      const mapResult = await p4(input, WORK_DIR, version, true);
       const dashOutputDir = path.join(WORK_DIR, "dash_out");
       const mixedVideoPath = path.join(WORK_DIR, `${mapResult.mapName}_Mixed.webm`);
 
       if (!resumeMode) {
         if (mapResult.videoPath) {
-          // 1. Mix Video
           logger.info(`Mixing AMBs and Syncing Video for ${mapResult.mapName}...`);
           const videoSuccess = await video.process({
             ambFiles: mapResult.ambFiles,
@@ -115,22 +179,18 @@ import { checkPrerequisites } from "./lib/prerequisites";
           });
           if (!videoSuccess) throw new Error("Video mixing failed.");
 
-          // 2. Convert DASH
-          const dashSuccess = await dash.processDash(mapResult.mapName, mixedVideoPath, dashOutputDir);
+          const dashSuccess = await dash.processDash(mapResult.mapName, mixedVideoPath, dashOutputDir, true);
           if (!dashSuccess) throw new Error("DASH conversion failed.");
 
         } else {
-          throw new Error("No video file detected.");
+          throw new Error("No video file detected in input folder.");
         }
       }
 
-      // --- Upload Stage ---
-      // Verify DASH files exist before trying to upload
       if (fs.existsSync(dashOutputDir) && fs.readdirSync(dashOutputDir).length > 0) {
         logger.info("Uploading DASH stream to Private S3...");
         await uploadDash(mapResult.mapName, dashOutputDir);
-
-        logger.info("Cleaning up temporary video workspace...");
+        logger.info("Cleaning up temporary workspace...");
         fs.removeSync(WORK_DIR);
       } else {
         logger.error("DASH output not found. Cannot resume upload.");
@@ -138,7 +198,31 @@ import { checkPrerequisites } from "./lib/prerequisites";
       }
     }
 
+
+    // --- WORKFLOW: CONVERT VIDEO DIRECT (RAW FILE -> DASH) ---
+    else if (workflow === Workflow.CONVERT_VIDEO_DIRECT) {
+        if (!mapName) throw new Error("Map Name is missing.");
+        const dashOutputDir = path.join(WORK_DIR, "dash_out");
+
+        if (!resumeMode) {
+            logger.info(`Starting Direct DASH conversion for ${mapName}...`);
+            const success = await dash.processDash(mapName, input, dashOutputDir, true);
+            if (!success) throw new Error("DASH conversion failed.");
+        }
+
+        if (fs.existsSync(dashOutputDir) && fs.readdirSync(dashOutputDir).length > 0) {
+            logger.info("Uploading DASH stream to Private S3...");
+            await uploadDash(mapName, dashOutputDir);
+            logger.info("Cleaning up temporary workspace...");
+            fs.removeSync(WORK_DIR);
+        } else {
+            logger.error("DASH output not found. Cannot resume upload.");
+            process.exit(1);
+        }
+    }
+
     logger.success("All tasks finished successfully.");
+
   } catch (error: any) {
     logger.error(`Fatal Error: ${error.message}`);
     process.exit(1);
